@@ -6,8 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import datetime
 import base64
-
-
+import io
 
 # ---------------------------------------------
 # 頁面設定
@@ -66,7 +65,10 @@ with st.sidebar.expander("1. 基地與容積參數", expanded=True):
 
 # ========== 2. 營建與建材 ==========
 with st.sidebar.expander("2. 營建與建材設定", expanded=True):
-    const_type = st.selectbox("建材結構等級", ["RC 一般標準 (S0)", "RC 高階 (+0.11)", "SRC/SC (+0.30)"])
+    const_type = st.selectbox(
+        "建材結構等級",
+        ["RC 一般標準 (S0)", "RC 高階 (+0.11)", "SRC/SC (+0.30)"]
+    )
 
     if "高階" in const_type:
         mat_coeff = 0.11
@@ -113,10 +115,9 @@ def get_risk_fee_rate(gfa_ping, owners):
         return 0.12
 
 # ---------------------------------------------
-# 核心計算模型（完整 A 版）
+# 核心計算模型
 # ---------------------------------------------
 def calculate_model():
-
     # 1. 面積計算
     area_far = base_area * far_base_exist * bonus_multiplier
     area_total = area_far * coeff_gfa
@@ -164,7 +165,6 @@ def calculate_model():
 
     # 10. IRR 現金流
     equity_ratio = 1 - loan_ratio
-
     initial_out = (c_advanced + c_design) + (c_engineering * equity_ratio * 0.1)
     yearly_cost = (c_engineering * equity_ratio * 0.9) / 3
     loan_repay = fund_demand * loan_ratio
@@ -184,7 +184,6 @@ def calculate_model():
     except:
         irr_val = 0
 
-    # 回傳結果
     return {
         "GFA": area_total,
         "Total_Cost": c_total,
@@ -210,7 +209,7 @@ def calculate_model():
     }
 
 # -----------------------------------------------------
-# 執行模型（重要！）
+# 執行模型
 # -----------------------------------------------------
 res = calculate_model()
 
@@ -288,7 +287,7 @@ with tab2:
 
             val_new = (area_sale * p) + (num_parking * price_parking)
             cost_build = area_total * c
-            cost_total = cost_build * 1.55  
+            cost_total = cost_build * 1.55  # 簡化共同負擔係數
 
             ratio = (1 - cost_total / val_new) * 100
             row.append(ratio)
@@ -382,16 +381,9 @@ def generate_report(res):
 
     return "\n".join(lines)
 
-# -----------------------------------------------------
-# 下載 TXT 報告按鈕
-# -----------------------------------------------------
-report_text = generate_report(res)
-st.download_button(
-    label="📄 下載 IRR 計算報告（TXT）",
-    data=report_text,
-    file_name="IRR_Report.txt",
-    mime="text/plain"
-)
+# =====================================================
+# HTML 報告（可列印成 PDF）
+# =====================================================
 def generate_html_report(res, fig_cost, fig_heat):
     # 轉換成本圓餅圖
     img_cost = io.BytesIO()
@@ -472,13 +464,49 @@ def generate_html_report(res, fig_cost, fig_heat):
     """
     return html
 
-html_report = generate_html_report(res, fig_cost, fig_heat)
+# =====================================================
+# Excel 成本＋現金流
+# =====================================================
+def generate_excel(res):
+    output = io.BytesIO()
 
+    df_cost = pd.DataFrame(res["Details"].items(), columns=["項目", "金額(萬元)"])
+    cf = res["Cashflow"]
+    df_cf = pd.DataFrame({
+        "期別": ["T0", "T1", "T2", "T3", "T4"],
+        "金額(萬元)": [cf["T0"], cf["T1"], cf["T2"], cf["T3"], cf["T4"]]
+    })
+
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        df_cost.to_excel(writer, sheet_name="成本拆解", index=False)
+        df_cf.to_excel(writer, sheet_name="現金流量表", index=False)
+
+    output.seek(0)
+    return output
+
+# -----------------------------------------------------
+# 下載按鈕區
+# -----------------------------------------------------
+report_text = generate_report(res)
 st.download_button(
-    label="📄 下載完整 PDF 報告（HTML，可直接列印成PDF）",
+    label="📄 下載 IRR 計算報告（TXT）",
+    data=report_text,
+    file_name="IRR_Report.txt",
+    mime="text/plain"
+)
+
+html_report = generate_html_report(res, fig_cost, fig_heat)
+st.download_button(
+    label="📄 下載完整報告（HTML，可列印成 PDF）",
     data=html_report,
     file_name="IRR_Report.html",
     mime="text/html"
 )
 
-
+excel_file = generate_excel(res)
+st.download_button(
+    label="📊 下載 Excel 成本＋現金流",
+    data=excel_file,
+    file_name="Cost_and_Cashflow.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
