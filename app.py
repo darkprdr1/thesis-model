@@ -5,11 +5,8 @@ import numpy_financial as npf
 import plotly.express as px
 import plotly.graph_objects as go
 import datetime
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
-from reportlab.lib.units import cm
-from reportlab.lib.utils import ImageReader
-import io
+import base64
+
 
 
 # ---------------------------------------------
@@ -399,131 +396,93 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import cm
 from reportlab.lib.utils import ImageReader
-import io
-def generate_pdf(res, fig_cost, fig_heat):
-    buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
 
-    width, height = A4
+def generate_html_report(res, fig_cost, fig_heat):
+    # 轉換成本圓餅圖
+    img_cost = io.BytesIO()
+    fig_cost.write_image(img_cost, format="png")
+    img_cost_base64 = base64.b64encode(img_cost.getvalue()).decode()
 
-    # --------- 標題 ---------
-    c.setFont("Helvetica-Bold", 18)
-    c.drawString(2 * cm, height - 2 * cm, "新北市防災都更財務模型｜IRR 計算報告")
-
-    c.setFont("Helvetica", 10)
-    c.drawString(2 * cm, height - 2.7 * cm, f"產生時間：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-
-    y = height - 4 * cm
-
-    # --------- 基本資料 ---------
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(2 * cm, y, "一、專案基本資訊")
-    y -= 0.6 * cm
-    c.setFont("Helvetica", 10)
-    lines = [
-        f"基地面積：{base_area} 坪",
-        f"防災獎勵倍數：{bonus_multiplier}",
-        f"總樓地板係數：{coeff_gfa}",
-        f"銷售係數：{coeff_sale}",
-        f"建材修正後單價：{final_unit_cost:.2f} 萬/坪",
-        f"貸款成數：{loan_ratio*100:.0f}%",
-        f"工期：{dev_months} 個月",
-        f"風險管理費率：{res['Risk_Rate']*100:.1f}%"
-    ]
-    for ln in lines:
-        c.drawString(2 * cm, y, ln)
-        y -= 0.5 * cm
-
-    # --------- 加入成本圓餅圖 ---------
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(2 * cm, y, "二、成本結構圖")
-    y -= 0.8 * cm
-
-    img_bytes = io.BytesIO()
-    fig_cost.write_image(img_bytes, format="PNG")
-    img_bytes.seek(0)
-    c.drawImage(ImageReader(img_bytes), 2 * cm, y - 8 * cm, width=12 * cm, height=8 * cm)
-    y -= 9 * cm
-
-    c.showPage()
-
-    # --------- 第二頁：敏感度圖 ---------
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(2 * cm, height - 2 * cm, "三、敏感度分析圖（房價 × 營建成本）")
-
-    img_bytes2 = io.BytesIO()
-    fig_heat.write_image(img_bytes2, format="PNG")
-    img_bytes2.seek(0)
-
-    c.drawImage(ImageReader(img_bytes2), 2 * cm, height - 18 * cm, width=14 * cm, height=14 * cm)
-
-    c.showPage()
-
-    # --------- 第三頁：IRR 與現金流 ---------
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(2 * cm, height - 2 * cm, "四、IRR 計算與投資可行性")
+    # 轉換熱力圖
+    img_heat = io.BytesIO()
+    fig_heat.write_image(img_heat, format="png")
+    img_heat_base64 = base64.b64encode(img_heat.getvalue()).decode()
 
     cf = res["Cashflow"]
-    lines = [
-        f"IRR：{res['IRR']*100:.2f}%",
-        f"T0 前期投入：{cf['T0']:.2f} 萬",
-        f"T1：{cf['T1']:.2f} 萬",
-        f"T2：{cf['T2']:.2f} 萬",
-        f"T3：{cf['T3']:.2f} 萬",
-        f"T4（最終現金回收）：{cf['T4']:.2f} 萬"
-    ]
 
-    y = height - 3.2 * cm
-    c.setFont("Helvetica", 11)
-    for ln in lines:
-        c.drawString(2 * cm, y, ln)
-        y -= 0.6 * cm
+    html = f"""
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                margin: 40px;
+                line-height: 1.6;
+            }}
+            h1 {{
+                color: #333;
+            }}
+            h2 {{
+                margin-top: 30px;
+            }}
+            img {{
+                margin-top: 10px;
+                margin-bottom: 20px;
+                width: 90%;
+            }}
+            .section {{
+                margin-bottom: 30px;
+            }}
+        </style>
+    </head>
 
-    c.save()
-    buffer.seek(0)
+    <body>
+        <h1>新北市防災都更財務模型｜IRR 計算報告</h1>
+        <p>產生時間：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
 
-    return buffer
-    # 生成 PDF
-pdf_file = generate_pdf(res, fig_cost, fig_heat)
+        <div class="section">
+            <h2>一、專案基本參數</h2>
+            <p>基地面積：{base_area} 坪</p>
+            <p>防災獎勵倍數：{bonus_multiplier}</p>
+            <p>總樓地板係數：{coeff_gfa}</p>
+            <p>銷售係數：{coeff_sale}</p>
+            <p>建材修正後成本：{final_unit_cost:.2f} 萬/坪</p>
+            <p>貸款成數：{loan_ratio*100:.0f}%</p>
+            <p>工期：{dev_months} 個月</p>
+        </div>
+
+        <div class="section">
+            <h2>二、共同負擔成本結構</h2>
+            <img src="data:image/png;base64,{img_cost_base64}" />
+        </div>
+
+        <div class="section">
+            <h2>三、敏感度分析圖（房價 × 營建成本）</h2>
+            <img src="data:image/png;base64,{img_heat_base64}" />
+        </div>
+
+        <div class="section">
+            <h2>四、IRR 與現金流</h2>
+            <p>IRR：{res['IRR']*100:.2f}%</p>
+            <p>T0：{cf['T0']:.2f} 萬</p>
+            <p>T1：{cf['T1']:.2f} 萬</p>
+            <p>T2：{cf['T2']:.2f} 萬</p>
+            <p>T3：{cf['T3']:.2f} 萬</p>
+            <p>T4（最終回收）：{cf['T4']:.2f} 萬</p>
+        </div>
+
+    </body>
+    </html>
+    """
+    return html
+
+html_report = generate_html_report(res, fig_cost, fig_heat)
 
 st.download_button(
-    label="📄 下載 PDF 完整報告",
-    data=pdf_file,
-    file_name="IRR_Report.pdf",
-    mime="application/pdf"
+    label="📄 下載完整 PDF 報告（HTML，可直接列印成PDF）",
+    data=html_report,
+    file_name="IRR_Report.html",
+    mime="text/html"
 )
-def generate_excel(res):
-    output = io.BytesIO()
-
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-
-        # 成本明細 Sheet
-        df_cost = pd.DataFrame(res["Details"].items(), columns=["項目", "金額(萬元)"])
-        df_cost.to_excel(writer, sheet_name="成本拆解", index=False)
-
-        # 現金流 Sheet
-        df_cf = pd.DataFrame({
-            "期別": ["T0", "T1", "T2", "T3", "T4"],
-            "金額(萬元)": [
-                res["Cashflow"]["T0"],
-                res["Cashflow"]["T1"],
-                res["Cashflow"]["T2"],
-                res["Cashflow"]["T3"],
-                res["Cashflow"]["T4"],
-            ]
-        })
-
-        df_cf.to_excel(writer, sheet_name="現金流量表", index=False)
-
-    output.seek(0)
-    return output
-excel_file = generate_excel(res)
-
-st.download_button(
-    label="📊 下載 Excel 成本＆現金流",
-    data=excel_file,
-    file_name="Cost_and_Cashflow.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
-
 
