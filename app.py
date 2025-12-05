@@ -480,5 +480,15 @@ def generate_html_report(res, fig_cost, fig_heat):
     </html>
     """
     return html
+    html_report = generate_html_report(res, fig_cost, fig_heat)
+
+st.download_button(
+    label="📄 下載完整 PDF 報告（HTML，可自行列印成 PDF）",
+    data=html_report,
+    file_name="IRR_Report.html",
+    mime="text/html"
+)
+
+
 
 
