@@ -392,11 +392,6 @@ st.download_button(
     file_name="IRR_Report.txt",
     mime="text/plain"
 )
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
-from reportlab.lib.units import cm
-from reportlab.lib.utils import ImageReader
-
 def generate_html_report(res, fig_cost, fig_heat):
     # 轉換成本圓餅圖
     img_cost = io.BytesIO()
@@ -485,4 +480,5 @@ st.download_button(
     file_name="IRR_Report.html",
     mime="text/html"
 )
+
 
