@@ -382,89 +382,6 @@ def generate_report(res):
     return "\n".join(lines)
 
 # =====================================================
-# HTML 報告（可列印成 PDF）
-# =====================================================
-def generate_html_report(res, fig_cost, fig_heat):
-    # 轉換成本圓餅圖
-    img_cost = io.BytesIO()
-    fig_cost.write_image(img_cost, format="png")
-    img_cost_base64 = base64.b64encode(img_cost.getvalue()).decode()
-
-    # 轉換熱力圖
-    img_heat = io.BytesIO()
-    fig_heat.write_image(img_heat, format="png")
-    img_heat_base64 = base64.b64encode(img_heat.getvalue()).decode()
-
-    cf = res["Cashflow"]
-
-    html = f"""
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <style>
-            body {{
-                font-family: Arial, sans-serif;
-                margin: 40px;
-                line-height: 1.6;
-            }}
-            h1 {{
-                color: #333;
-            }}
-            h2 {{
-                margin-top: 30px;
-            }}
-            img {{
-                margin-top: 10px;
-                margin-bottom: 20px;
-                width: 90%;
-            }}
-            .section {{
-                margin-bottom: 30px;
-            }}
-        </style>
-    </head>
-
-    <body>
-        <h1>新北市防災都更財務模型｜IRR 計算報告</h1>
-        <p>產生時間：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-
-        <div class="section">
-            <h2>一、專案基本參數</h2>
-            <p>基地面積：{base_area} 坪</p>
-            <p>防災獎勵倍數：{bonus_multiplier}</p>
-            <p>總樓地板係數：{coeff_gfa}</p>
-            <p>銷售係數：{coeff_sale}</p>
-            <p>建材修正後成本：{final_unit_cost:.2f} 萬/坪</p>
-            <p>貸款成數：{loan_ratio*100:.0f}%</p>
-            <p>工期：{dev_months} 個月</p>
-        </div>
-
-        <div class="section">
-            <h2>二、共同負擔成本結構</h2>
-            <img src="data:image/png;base64,{img_cost_base64}" />
-        </div>
-
-        <div class="section">
-            <h2>三、敏感度分析圖（房價 × 營建成本）</h2>
-            <img src="data:image/png;base64,{img_heat_base64}" />
-        </div>
-
-        <div class="section">
-            <h2>四、IRR 與現金流</h2>
-            <p>IRR：{res['IRR']*100:.2f}%</p>
-            <p>T0：{cf['T0']:.2f} 萬</p>
-            <p>T1：{cf['T1']:.2f} 萬</p>
-            <p>T2：{cf['T2']:.2f} 萬</p>
-            <p>T3：{cf['T3']:.2f} 萬</p>
-            <p>T4（最終回收）：{cf['T4']:.2f} 萬</p>
-        </div>
-
-    </body>
-    </html>
-    """
-    return html
-
-# =====================================================
 # Excel 成本＋現金流
 # =====================================================
 def generate_excel(res):
@@ -563,4 +480,5 @@ def generate_html_report(res, fig_cost, fig_heat):
     </html>
     """
     return html
+
 
