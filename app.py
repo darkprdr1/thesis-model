@@ -303,3 +303,79 @@ with tab3:
 | **風險費率** | 12% | 14% |
     """)
     st.info("請使用左側調整參數模擬不同情境。")
+# ======================================================
+# ⭐ 新增功能：自動產生 IRR 模型計算報告
+# ======================================================
+
+import datetime
+
+def generate_report(res):
+    report_lines = []
+
+    report_lines.append("【新北市防災都更財務模型｜IRR 計算報告】")
+    report_lines.append(f"產生時間：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    report_lines.append("------------------------------------------------------------\n")
+
+    # 基地 & 容積資訊
+    report_lines.append("【一、基地與容積參數】")
+    report_lines.append(f"基地面積：{base_area} 坪")
+    report_lines.append(f"原建築容積率：{far_base_exist*100:.1f} %")
+    report_lines.append(f"防災獎勵倍數：{bonus_multiplier}")
+    report_lines.append(f"總樓地板係數 K_GFA：{coeff_gfa}")
+    report_lines.append(f"銷售係數 K_Sale：{coeff_sale}\n")
+
+    # 建材
+    report_lines.append("【二、營建與建材參數】")
+    report_lines.append(f"基準單價：{base_unit_cost} 萬/坪")
+    report_lines.append(f"建材係數後單價：{final_unit_cost:.2f} 萬/坪\n")
+
+    # 財務參數
+    report_lines.append("【三、財務與風險參數】")
+    report_lines.append(f"貸款成數：{loan_ratio*100:.1f}%")
+    report_lines.append(f"貸款利率：{loan_rate*100:.2f}%")
+    report_lines.append(f"開發期程：約 {dev_months} 個月")
+    report_lines.append(f"風險管理費率 (查表)：{res['Risk_Rate']*100:.1f}%\n")
+
+    # 成本明細
+    report_lines.append("【四、共同負擔成本明細（萬元）】")
+    for k, v in res["Details"].items():
+        report_lines.append(f"{k}：{v:,.2f}")
+    report_lines.append("\n總共同負擔：{0:,.2f} 萬元\n".format(res["Total_Cost"]))
+
+    # 總價值
+    report_lines.append("【五、總銷價值與分回結果】")
+    report_lines.append(f"更新後總銷：{res['Total_Value']/10000:.2f} 億元")
+    report_lines.append(f"地主分回比例：{res['Landlord_Ratio']*100:.2f}%")
+    report_lines.append(f"實施者 IRR：{res['IRR']*100:.2f}%\n")
+
+    # 現金流
+    report_lines.append("【六、IRR 計算使用之現金流（萬元）】")
+    report_lines.append("T0（前期支出） = {:.2f}".format(-initial_out))
+    report_lines.append("T1 = {:.2f}".format(-yearly_cost))
+    report_lines.append("T2 = {:.2f}".format(-yearly_cost))
+    report_lines.append("T3 = {:.2f}".format(-yearly_cost))
+    report_lines.append("T4（最終回收） = {:.2f}".format(final_in))
+    report_lines.append("\n")
+
+    # IRR 評估
+    report_lines.append("【七、可行性判斷】")
+    if res["IRR"] >= 0.12:
+        report_lines.append("✔ IRR ≥ 12%，專案具投資可行性。")
+    else:
+        report_lines.append("✘ IRR < 12%，專案需調整參數方可達投資條件。")
+
+    return "\n".join(report_lines)
+
+
+# ---- Streamlit 下載按鈕 ----
+
+if st.button("📄 下載 IRR 模型計算報告"):
+    report_text = generate_report(res)
+    st.download_button(
+        label="⬇ 下載報告（TXT）",
+        data=report_text,
+        file_name="IRR_report.txt",
+        mime="text/plain"
+    )
+    st.success("報告已成功產生！")
+
