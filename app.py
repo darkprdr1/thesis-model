@@ -287,6 +287,10 @@ res = calculate_model()
 # ---------------------------------------------
 # 結果看板
 # ---------------------------------------------
+
+# ⭐⭐ 必須先執行模型，否則 res 不存在 ⭐⭐
+res = calculate_model()
+
 st.markdown("### 📊 運算結果看板")
 
 col1, col2, col3, col4 = st.columns(4)
@@ -462,4 +466,5 @@ def generate_report(res):
         report_lines.append("✘ IRR < 12%，專案需調整參數方可達投資條件。")
 
     return "\n".join(report_lines)
+
 
