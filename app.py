@@ -2,668 +2,219 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import numpy_financial as npf
-import plotly.graph_objects as go
 import plotly.express as px
-from datetime import datetime
+import plotly.graph_objects as go
 
-# 頁面配置
+# ---------------------------------------------
+# 頁面設定
+# ---------------------------------------------
 st.set_page_config(
-    page_title="防災都更試算系統",
-    page_icon="🏢",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="新北市防災都更財務模型 (論文修正版)",
+    page_icon="🏙️",
+    layout="wide"
 )
 
-# 自訂CSS - 使用raw字符串避免轉義問題
-st.markdown(r"""
+# ---------------------------------------------
+# CSS 優化
+# ---------------------------------------------
+st.markdown("""
 <style>
-    .header-title {
-        font-size: 32px;
-        font-weight: bold;
-        color: #1f4788;
-        margin-bottom: 10px;
-    }
-    .warning-box {
-        background-color: #fff3cd;
+    .metric-card {
+        background-color: #f0f2f6;
+        border-radius: 10px;
         padding: 15px;
-        border-left: 4px solid #ffc107;
-        border-radius: 4px;
+        border-left: 5px solid #4e73df;
     }
-    .success-box {
-        background-color: #d4edda;
-        padding: 15px;
-        border-left: 4px solid #28a745;
-        border-radius: 4px;
+    .stTabs [data-baseweb="tab-list"] {gap: 10px;}
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        background-color: #f0f2f6;
+        border-radius: 5px 5px 0px 0px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #4e73df;
+        color: white;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# 初始化Session
-if 'scenario' not in st.session_state:
-    st.session_state.scenario = 'A'
-if 'results' not in st.session_state:
-    st.session_state.results = {}
+# ---------------------------------------------
+# 標題區
+# ---------------------------------------------
+st.title("🏙️ 新北市防災都更權利變換試算模型")
+st.markdown("### 第三章：混合研究法與參數建構實證")
+st.info("本模型已依據專家訪談與文獻回饋修正，包含建材係數、風險費率查表與管理費結構拆分。")
 
-# 標題
-st.markdown('<div class="header-title">🏢 新北市防災型都市更新</div>', unsafe_allow_html=True)
-st.markdown('### 權利變換試算系統 v2024.12')
-st.markdown('---')
+# ---------------------------------------------
+# 側邊欄：參數設定
+# ---------------------------------------------
+st.sidebar.header("⚙️ 參數設定面板")
 
-# 側邊欄配置
-with st.sidebar:
-    st.header("⚙️ 系統設定")
-    
-    scenario = st.radio(
-        "選擇計算情境",
-        options=['A', 'B'],
-        format_func=lambda x: {'A': '情境A - 官方基準', 'B': '情境B - 市場實況'}[x],
-        help="情境A採用官方提列基準\n情境B採用市場實務數據"
-    )
-    st.session_state.scenario = scenario
-    
-    st.markdown('---')
-    st.subheader("📋 基本設定")
-    
-    base_area = st.number_input(
-        "基地面積 (m²)",
-        min_value=100,
-        max_value=10000,
-        value=1000,
-        step=100,
-        help="都市更新基地面積"
-    )
-    
-    floor_count = st.number_input(
-        "預計樓層數",
-        min_value=1,
-        max_value=30,
-        value=12,
-        help="更新後建築物地上樓層數"
-    )
-    
-    basement_levels = st.number_input(
-        "地下層數",
-        min_value=0,
-        max_value=5,
-        value=2,
-        help="地下樓層數"
-    )
-    
-    st.markdown('---')
-    st.subheader("💰 容積與價格")
-    
-    fsr_current = st.number_input(
-        "法定容積率 (%)",
-        min_value=100,
-        max_value=500,
-        value=200,
-        step=10
-    )
-    
-    bonus_disaster = st.slider(
-        "防災容積獎勵倍數",
-        min_value=1.0,
-        max_value=2.0,
-        value=1.5,
-        step=0.1
-    )
-    
-    use_original_fsr = st.checkbox(
-        "採用原建築容積",
-        value=False
-    )
-    
-    if use_original_fsr:
-        original_fsr_ratio = st.slider(
-            "原建築容積倍數",
-            min_value=1.0,
-            max_value=2.0,
-            value=1.4,
-            step=0.1
-        )
-        base_fsr = fsr_current * original_fsr_ratio
+# ========== 1. 基地與容積 ==========
+with st.sidebar.expander("1. 基地與容積參數", expanded=True):
+    base_area = st.number_input("基地面積 (坪)", value=300.0, step=10.0)
+    far_legal = st.number_input("法定容積率 (%)", value=200.0, step=10.0) / 100
+    far_base_exist = st.number_input("原建築容積率 (%)", value=300.0, step=10.0) / 100
+    bonus_multiplier = st.number_input("防災獎勵倍數", value=1.5, step=0.1)
+    coeff_gfa = st.number_input("總樓地板係數 K_GFA", value=1.8, step=0.1)
+    coeff_sale = st.number_input("銷售面積係數 K_Sale", value=1.6, step=0.1)
+
+# ========== 2. 營建與建材 ==========
+with st.sidebar.expander("2. 營建與建材設定", expanded=True):
+    const_type = st.selectbox("建材結構等級", ["RC 一般標準 (S0)", "RC 高階 (+0.11)", "SRC/SC (+0.30)"])
+    if "高階" in const_type:
+        mat_coeff = 0.11
+    elif "SRC" in const_type:
+        mat_coeff = 0.30
     else:
-        base_fsr = fsr_current
-    
-    st.markdown('---')
-    st.subheader("💵 價格假設")
-    
-    unit_price_sale = st.number_input(
-        "住宅預售單價 (萬/坪)",
-        min_value=20,
-        max_value=150,
-        value=65 if scenario == 'B' else 60,
-        step=5
-    )
-    
-    land_unit_price = st.number_input(
-        "土地公告現值 (萬/坪)",
-        min_value=5,
-        max_value=100,
-        value=30,
-        step=5
-    )
+        mat_coeff = 0.0
 
-# 主要內容區
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    ["📊 基本試算", "💹 詳細成本", "🎯 權利分配", "📈 敏感度分析", "📋 案例驗證"]
-)
+    base_unit_cost = st.number_input("營建基準單價 (萬/坪)", value=16.23, step=0.5)
+    final_unit_cost = base_unit_cost * (1 + mat_coeff)
+    st.caption(f"💡 修正後單價：{final_unit_cost:.2f} 萬/坪 (係數 +{mat_coeff})")
 
-# 計算函數
-def calculate_gfa(base_area, base_fsr, bonus_disaster):
-    """計算總樓地板面積"""
-    base_area_ping = base_area / 3.3
-    fsr_after_bonus = base_fsr * bonus_disaster
-    gfa = base_area_ping * fsr_after_bonus * 1.8
-    return gfa, base_area_ping, fsr_after_bonus
+# ========== 3. 財務與風險 ==========
+with st.sidebar.expander("3. 財務與風險參數", expanded=True):
+    num_owners = st.number_input("產權人數 (人)", value=20, step=5)
+    rate_personnel = st.number_input("人事行政管理費率 (%)", value=3.0, step=0.5) / 100
+    rate_sales = st.number_input("銷售管理費率 (%)", value=6.0, step=0.5) / 100
+    loan_ratio = st.slider("貸款成數 (%)", 40, 80, 60) / 100
+    loan_rate = st.number_input("貸款年利率 (%)", value=3.0, step=0.1) / 100
+    dev_months = st.number_input("開發期程 (月)", value=48, step=6)
 
-def get_scenario_params(scenario_type):
-    """取得情境參數"""
-    if scenario_type == 'A':
-        return {
-            'construction_unit_price': 9.98,
-            'sales_unit_price': 60,
-            'management_fee_rate': 0.43,
-            'risk_fee_rate': 0.12,
-            'loan_ratio': 0.50,
-            'interest_rate': 0.025,
-            'scenario_name': '官方基準'
-        }
+# ========== 4. 進階費用 ==========
+with st.sidebar.expander("4. 進階費用設定 (B/G/H類)", expanded=False):
+    cost_bonus_app = st.number_input("容積獎勵申請費 (萬)", value=500, step=50)
+    cost_urban_plan = st.number_input("都計變更/審議費 (萬)", value=300, step=50)
+    cost_transfer = st.number_input("容積移轉/折繳代金 (萬)", value=0, step=100)
+
+# ========== 5. 估價與銷售 ==========
+with st.sidebar.expander("5. 估價與銷售", expanded=False):
+    val_old_total = st.number_input("更新前現況總值 (億元)", value=5.4, step=0.1) * 10000
+    price_unit_sale = st.number_input("更新後預售單價 (萬/坪)", value=60.0, step=2.0)
+    price_parking = st.number_input("車位平均單價 (萬/個)", value=220, step=10)
+
+# ---------------------------------------------
+# 功能：風險費率查表
+# ---------------------------------------------
+def get_risk_fee_rate(gfa_ping, owners):
+    if gfa_ping < 3000 or owners > 50:
+        return 0.14
+    elif gfa_ping < 5000:
+        return 0.13
     else:
-        return {
-            'construction_unit_price': 24.0,
-            'sales_unit_price': 68,
-            'management_fee_rate': 0.18,
-            'risk_fee_rate': 0.12,
-            'loan_ratio': 0.60,
-            'interest_rate': 0.035,
-            'scenario_name': '市場實況'
-        }
+        return 0.12
 
-def calculate_costs(gfa, params, floor_count, basement_levels):
-    """計算各項成本"""
-    demolition_cost = (gfa / 1.8) * 0.0008 * 10000
-    construction_cost = gfa * params['construction_unit_price']
-    design_fee = construction_cost * 0.05
-    
-    construction_period = basement_levels * 3 + floor_count * 1.5
-    
-    total_cost_before_interest = demolition_cost + construction_cost + design_fee
-    financing_amount = total_cost_before_interest * params['loan_ratio']
-    interest_cost = financing_amount * params['interest_rate'] * (construction_period / 12)
-    
-    risk_fee = (demolition_cost + construction_cost + design_fee) * params['risk_fee_rate']
-    management_fee = (demolition_cost + construction_cost) * params['management_fee_rate']
-    misc_cost = total_cost_before_interest * 0.08
-    
-    total_cost = (demolition_cost + construction_cost + design_fee + 
-                  interest_cost + risk_fee + management_fee + misc_cost)
-    
-    return {
-        'demolition': demolition_cost,
-        'construction': construction_cost,
-        'design': design_fee,
-        'interest': interest_cost,
-        'risk': risk_fee,
-        'management': management_fee,
-        'misc': misc_cost,
-        'total': total_cost,
-        'period': construction_period
-    }
+# ---------------------------------------------
+# 核心計算函式
+# ---------------------------------------------
+def calculate_model():
+    area_far = base_area * far_base_exist * bonus_multiplier
+    area_total = area_far * coeff_gfa
+    area_sale = area_far * coeff_sale
+    num_parking = int(area_total / 35)
 
-def calculate_revenue(gfa, unit_price_sale, land_area_ping, land_unit_price, parking_units=0):
-    """計算開發收入"""
-    sales_revenue = gfa * unit_price_sale
-    land_value = land_area_ping * land_unit_price
-    parking_revenue = parking_units * 80
-    
-    return {
-        'sales': sales_revenue,
-        'land_value': land_value,
-        'parking': parking_revenue,
-        'total': sales_revenue + parking_revenue
-    }
+    # 工程費
+    c_demo = base_area * 3 * 0.15
+    c_build = area_total * final_unit_cost
+    c_engineering = c_demo + c_build
 
-def calculate_irr(costs, revenue, period_years=4):
-    """計算IRR"""
-    cash_flows = [-costs['total']]
-    
-    for year in range(1, int(period_years)):
-        if year <= costs['period'] / 12:
-            cash_flows.append(0)
-        else:
-            cash_flows.append(revenue['total'] - costs['total'] * 0.1)
-    
-    cash_flows[-1] += revenue['total']
-    
+    # 進階費用
+    c_advanced = cost_bonus_app + cost_urban_plan + cost_transfer
+
+    # 設計/安置
+    c_design = c_build * 0.06
+    c_reloc = c_build * 0.05
+
+    # 管理費
+    rate_risk = get_risk_fee_rate(area_total, num_owners)
+    c_mgmt_risk = c_build * rate_risk
+    c_mgmt_personnel = c_build * rate_personnel
+    c_mgmt_sales = (area_sale * price_unit_sale) * 0.05
+    c_mgmt_total = c_mgmt_risk + c_mgmt_personnel + c_mgmt_sales
+
+    # 利息
+    fund_demand = c_engineering + c_advanced + c_design + c_reloc
+    c_interest = fund_demand * loan_ratio * loan_rate * (dev_months / 12) * 0.5
+
+    # 稅捐
+    c_tax = c_build * 0.03
+
+    # 總成本
+    c_total = (c_engineering + c_advanced + c_design + c_reloc +
+               c_mgmt_total + c_interest + c_tax)
+
+    # 價值
+    val_parking_total = num_parking * price_parking
+    val_new_total = (area_sale * price_unit_sale) + val_parking_total
+
+    ratio_burden = c_total / val_new_total if val_new_total > 0 else 0
+    ratio_landlord = 1 - ratio_burden
+
+    # IRR 現金流
+    equity_ratio = 1 - loan_ratio
+    initial_out = (c_advanced + c_design) + (c_engineering * equity_ratio * 0.1)
+    yearly_cost = (c_engineering * equity_ratio * 0.9) / 3
+    loan_repay = fund_demand * loan_ratio
+    final_in = val_new_total - loan_repay - c_tax - c_mgmt_total - c_interest
+
+    c_flow = [-initial_out, -yearly_cost, -yearly_cost, -yearly_cost, final_in]
     try:
-        irr = npf.irr(cash_flows)
-        return max(irr, -0.99) * 100
+        irr_val = npf.irr(c_flow)
     except:
-        return 0
+        irr_val = 0
 
-# TAB 1: 基本試算
-with tab1:
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("📍 基地條件總結")
-        
-        gfa, base_area_ping, fsr_after = calculate_gfa(base_area, base_fsr, bonus_disaster)
-        
-        summary_data = {
-            '指標': ['基地面積(m²)', '基地面積(坪)', '法定容積率', '容積獎勵倍數', 
-                     '更新後容積率', '總樓地板面積(坪)', '平均每戶面積(坪)'],
-            '數值': [
-                f"{base_area:,}",
-                f"{base_area_ping:.0f}",
-                f"{fsr_current}%",
-                f"{bonus_disaster}倍",
-                f"{fsr_after*100:.0f}%",
-                f"{gfa:,.0f}",
-                f"{gfa/30:.0f}"
-            ]
-        }
-        
-        st.dataframe(summary_data, use_container_width=True, hide_index=True)
-    
-    with col2:
-        st.subheader("💡 情境對比")
-        
-        params_a = get_scenario_params('A')
-        params_b = get_scenario_params('B')
-        
-        comparison = pd.DataFrame({
-            '參數': ['營建單價', '預售單價', '管理費率', '貸款成數', '利率'],
-            '情境A(官方基準)': [
-                f"{params_a['construction_unit_price']} 萬/坪",
-                f"{params_a['sales_unit_price']} 萬/坪",
-                f"{params_a['management_fee_rate']*100:.0f}%",
-                f"{params_a['loan_ratio']*100:.0f}%",
-                f"{params_a['interest_rate']*100:.1f}%"
-            ],
-            '情境B(市場實況)': [
-                f"{params_b['construction_unit_price']} 萬/坪",
-                f"{params_b['sales_unit_price']} 萬/坪",
-                f"{params_b['management_fee_rate']*100:.0f}%",
-                f"{params_b['loan_ratio']*100:.0f}%",
-                f"{params_b['interest_rate']*100:.1f}%"
-            ]
-        })
-        
-        st.dataframe(comparison, use_container_width=True, hide_index=True)
-        
-        st.markdown(r"""
-        <div class="warning-box">
-        💡 <b>情境說明：</b><br>
-        • 情境A：計畫向政府申報版本，採用官方提列基準<br>
-        • 情境B：實施者真實財務評估版本，反映市場實況<br>
-        • 落差：營建成本相差130%、管理費率差25個百分點
-        </div>
-        """, unsafe_allow_html=True)
-
-# TAB 2: 詳細成本
-with tab2:
-    st.subheader("💰 成本結構分析")
-    
-    calc_scenario = st.selectbox(
-        "選擇計算情境",
-        options=['A', 'B'],
-        format_func=lambda x: f"情境{x}",
-        key='cost_scenario'
-    )
-    
-    params = get_scenario_params(calc_scenario)
-    costs = calculate_costs(gfa, params, floor_count, basement_levels)
-    
-    cost_detail = pd.DataFrame({
-        '成本項目': ['拆除費用', '營建費用', '設計費用', '貸款利息', '風險費用', '管理費用', '其他費用', '合計'],
-        '金額(萬元)': [
-            f"{costs['demolition']:,.0f}",
-            f"{costs['construction']:,.0f}",
-            f"{costs['design']:,.0f}",
-            f"{costs['interest']:,.0f}",
-            f"{costs['risk']:,.0f}",
-            f"{costs['management']:,.0f}",
-            f"{costs['misc']:,.0f}",
-            f"{costs['total']:,.0f}"
-        ],
-        '占比': [
-            f"{costs['demolition']/costs['total']*100:.1f}%",
-            f"{costs['construction']/costs['total']*100:.1f}%",
-            f"{costs['design']/costs['total']*100:.1f}%",
-            f"{costs['interest']/costs['total']*100:.1f}%",
-            f"{costs['risk']/costs['total']*100:.1f}%",
-            f"{costs['management']/costs['total']*100:.1f}%",
-            f"{costs['misc']/costs['total']*100:.1f}%",
-            "100.0%"
-        ]
-    })
-    
-    st.dataframe(cost_detail, use_container_width=True, hide_index=True)
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("📊 成本占比圓餅圖")
-        
-        cost_labels = ['拆除', '營建', '設計', '利息', '風險', '管理', '其他']
-        cost_values = [
-            costs['demolition'], costs['construction'], costs['design'],
-            costs['interest'], costs['risk'], costs['management'], costs['misc']
-        ]
-        
-        fig_pie = go.Figure(data=[go.Pie(labels=cost_labels, values=cost_values)])
-        fig_pie.update_layout(height=400, font=dict(size=12))
-        st.plotly_chart(fig_pie, use_container_width=True)
-    
-    with col2:
-        st.subheader("📈 成本柱狀圖")
-        
-        fig_bar = go.Figure(data=[
-            go.Bar(x=cost_labels, y=cost_values, marker_color='steelblue')
-        ])
-        fig_bar.update_layout(
-            height=400,
-            xaxis_title="成本項目",
-            yaxis_title="金額(萬元)",
-            showlegend=False
-        )
-        st.plotly_chart(fig_bar, use_container_width=True)
-    
-    st.markdown('---')
-    st.subheader("⏱️ 工期與融資成本")
-    
-    col_period1, col_period2, col_period3 = st.columns(3)
-    
-    with col_period1:
-        st.metric("工程工期", f"{costs['period']:.1f} 月", f"≈ {costs['period']/12:.1f} 年")
-    
-    with col_period2:
-        st.metric("融資金額", f"{costs['total'] * params['loan_ratio']:,.0f} 萬元", 
-                  f"占 {params['loan_ratio']*100:.0f}%")
-    
-    with col_period3:
-        st.metric("貸款利息", f"{costs['interest']:,.0f} 萬元", 
-                  f"利率 {params['interest_rate']*100:.2f}%")
-
-# TAB 3: 權利分配
-with tab3:
-    st.subheader("🎯 權利變換分配計算")
-    
-    col_scenario3, col_bonus = st.columns([1, 2])
-    
-    with col_scenario3:
-        dist_scenario = st.selectbox(
-            "選擇計算情境",
-            options=['A', 'B'],
-            key='distribution_scenario',
-            format_func=lambda x: f"情境{x}"
-        )
-    
-    with col_bonus:
-        bonus_range = st.slider(
-            "容積獎勵模擬範圍",
-            min_value=0,
-            max_value=50,
-            value=(0, 50),
-            step=5
-        )
-    
-    dist_params = get_scenario_params(dist_scenario)
-    
-    bonus_results = []
-    
-    for bonus_pct in range(bonus_range[0], bonus_range[1]+5, 5):
-        bonus_mult = 1 + bonus_pct / 100
-        
-        gfa_scenario = base_area_ping * fsr_current * bonus_mult * 1.8
-        costs_scenario = calculate_costs(gfa_scenario, dist_params, floor_count, basement_levels)
-        
-        total_value = gfa_scenario * dist_params['sales_unit_price']
-        owner_share = (total_value - costs_scenario['total']) * 0.5
-        developer_irr = calculate_irr(costs_scenario, {'total': total_value, 'sales': total_value})
-        
-        bonus_results.append({
-            '容積獎勵': f"{bonus_pct}%",
-            '容積倍數': f"{bonus_mult:.2f}",
-            '樓地板面積': f"{gfa_scenario:,.0f}",
-            '開發總值': f"{total_value:,.0f}",
-            '總成本': f"{costs_scenario['total']:,.0f}",
-            '地主分回': f"{owner_share:,.0f}",
-            '地主分回率': f"{owner_share/total_value*100:.1f}%",
-            '實施者IRR': f"{developer_irr:.1f}%"
-        })
-    
-    dist_df = pd.DataFrame(bonus_results)
-    st.dataframe(dist_df, use_container_width=True, hide_index=True)
-    
-    st.markdown('---')
-    st.subheader("📊 權利分配趨勢圖")
-    
-    bonus_range_data = [int(x.strip('%')) for x in dist_df['容積獎勵']]
-    owner_share_pct = [float(x.strip('%')) for x in dist_df['地主分回率']]
-    developer_irr_data = [float(x.strip('%')) for x in dist_df['實施者IRR']]
-    
-    fig_dist = go.Figure()
-    
-    fig_dist.add_trace(go.Scatter(
-        x=bonus_range_data, y=owner_share_pct,
-        mode='lines+markers', name='地主分回率',
-        line=dict(color='green', width=3),
-        marker=dict(size=8)
-    ))
-    
-    fig_dist.add_trace(go.Scatter(
-        x=bonus_range_data, y=developer_irr_data,
-        mode='lines+markers', name='實施者IRR',
-        line=dict(color='blue', width=3),
-        marker=dict(size=8),
-        yaxis='y2'
-    ))
-    
-    fig_dist.update_layout(
-        title="容積獎勵對分配的影響",
-        xaxis_title="容積獎勵 (%)",
-        yaxis_title="地主分回率 (%)",
-        yaxis2=dict(title="實施者IRR (%)", overlaying='y', side='right'),
-        height=500,
-        hovermode='x unified'
-    )
-    
-    st.plotly_chart(fig_dist, use_container_width=True)
-
-# TAB 4: 敏感度分析
-with tab4:
-    st.subheader("📈 敏感度分析")
-    
-    col_sen1, col_sen2 = st.columns(2)
-    
-    with col_sen1:
-        price_range = st.slider(
-            "房價範圍 (萬/坪)",
-            min_value=40,
-            max_value=100,
-            value=(50, 80),
-            step=5
-        )
-    
-    with col_sen2:
-        cost_range = st.slider(
-            "營建單價範圍 (萬/坪)",
-            min_value=8,
-            max_value=30,
-            value=(10, 25),
-            step=1
-        )
-    
-    prices = np.linspace(price_range[0], price_range[1], 7)
-    costs_unit = np.linspace(cost_range[0], cost_range[1], 7)
-    
-    sensitivity_matrix_owner = np.zeros((len(costs_unit), len(prices)))
-    sensitivity_matrix_irr = np.zeros((len(costs_unit), len(prices)))
-    
-    for i, cost in enumerate(costs_unit):
-        for j, price in enumerate(prices):
-            params_temp = {
-                'construction_unit_price': cost,
-                'sales_unit_price': price,
-                'management_fee_rate': 0.25,
-                'risk_fee_rate': 0.12,
-                'loan_ratio': 0.55,
-                'interest_rate': 0.03,
-            }
-            
-            costs_temp = calculate_costs(gfa, params_temp, floor_count, basement_levels)
-            revenue_temp = calculate_revenue(gfa, price, base_area_ping, land_unit_price)
-            
-            owner_ratio = (revenue_temp['total'] - costs_temp['total']) / revenue_temp['total'] * 100
-            irr_temp = calculate_irr(costs_temp, revenue_temp)
-            
-            sensitivity_matrix_owner[i, j] = max(0, min(100, owner_ratio))
-            sensitivity_matrix_irr[i, j] = max(-50, min(50, irr_temp))
-    
-    col_heat1, col_heat2 = st.columns(2)
-    
-    with col_heat1:
-        st.subheader("地主分回率 (%)")
-        
-        fig_heat1 = go.Figure(data=go.Heatmap(
-            z=sensitivity_matrix_owner,
-            x=[f"{p}萬" for p in prices],
-            y=[f"{c}萬" for c in costs_unit],
-            colorscale='RdYlGn',
-            text=sensitivity_matrix_owner.round(1),
-            texttemplate='%{text:.1f}%',
-            colorbar=dict(title="分回率(%)")
-        ))
-        
-        fig_heat1.update_layout(
-            title="房價 vs 營建單價",
-            xaxis_title="房價 (萬/坪)",
-            yaxis_title="營建單價 (萬/坪)",
-            height=500
-        )
-        
-        st.plotly_chart(fig_heat1, use_container_width=True)
-    
-    with col_heat2:
-        st.subheader("實施者IRR (%)")
-        
-        fig_heat2 = go.Figure(data=go.Heatmap(
-            z=sensitivity_matrix_irr,
-            x=[f"{p}萬" for p in prices],
-            y=[f"{c}萬" for c in costs_unit],
-            colorscale='RdYlGn',
-            text=sensitivity_matrix_irr.round(1),
-            texttemplate='%{text:.1f}%',
-            colorbar=dict(title="IRR(%)")
-        ))
-        
-        fig_heat2.update_layout(
-            title="房價 vs 營建單價",
-            xaxis_title="房價 (萬/坪)",
-            yaxis_title="營建單價 (萬/坪)",
-            height=500
-        )
-        
-        st.plotly_chart(fig_heat2, use_container_width=True)
-    
-    st.markdown('---')
-    st.subheader("📊 可行性邊界分析")
-    
-    st.markdown(r"""
-    <div class="success-box">
-    ✅ <b>可行性邊界判定標準：</b><br>
-    • 實施者 IRR ≥ 12% (市場期望最低值)<br>
-    • 地主分回率 ≥ 40% (合理預期)<br>
-    • 綠色區域 = 同時滿足兩個條件的可行區域
-    </div>
-    """, unsafe_allow_html=True)
-
-# TAB 5: 案例驗證
-with tab5:
-    st.subheader("📋 典型案例驗證")
-    
-    case_select = st.selectbox(
-        "選擇驗證案例",
-        options=['案例一：蘆洲小規模案件', '案例二：三重大規模案件']
-    )
-    
-    if '蘆洲' in case_select:
-        case_data = {
-            '位置': '新北市蘆洲區',
-            '基地面積': 800,
-            '法定容積率': 200,
-            '建築類型': '老舊公寓',
-            '樓層數': 5,
-            '權利人數': 15,
-            '屋齡': 42,
-            '預設房價': 65,
-            '預設成本': 24
-        }
-    else:
-        case_data = {
-            '位置': '新北市三重區',
-            '基地面積': 1200,
-            '法定容積率': 300,
-            '建築類型': '集合住宅',
-            '樓層數': 12,
-            '權利人數': 28,
-            '屋齡': 38,
-            '預設房價': 68,
-            '預設成本': 25
-        }
-    
-    col_case1, col_case2 = st.columns(2)
-    
-    with col_case1:
-        st.info(f"""
-        📍 **{case_data['位置']}**
-        
-        基地面積：{case_data['基地面積']} m²
-        建築類型：{case_data['建築類型']}
-        樓層數：{case_data['樓層數']} 層
-        權利人數：{case_data['權利人數']} 戶
-        屋齡：{case_data['屋齡']} 年
-        """)
-    
-    with col_case2:
-        st.success(f"""
-        ⚙️ **預設參數**
-        
-        法定容積率：{case_data['法定容積率']}%
-        預售房價：{case_data['預設房價']} 萬/坪
-        營建單價：{case_data['預設成本']} 萬/坪
-        容積獎勵：1.5 倍（防災2.0）
-        """)
-    
-    case_gfa, case_base_ping, case_fsr = calculate_gfa(
-        case_data['基地面積'], 
-        case_data['法定容積率'],
-        1.5
-    )
-    
-    case_params = {
-        'construction_unit_price': case_data['預設成本'],
-        'sales_unit_price': case_data['預設房價'],
-        'management_fee_rate': 0.20,
-        'risk_fee_rate': 0.12,
-        'loan_ratio': 0.60,
-        'interest_rate': 0.03,
+    return {
+        "GFA": area_total,
+        "Total_Cost": c_total,
+        "Total_Value": val_new_total,
+        "Landlord_Ratio": ratio_landlord,
+        "IRR": irr_val,
+        "Risk_Rate": rate_risk
     }
-    
-    case_costs = calculate_costs(case_gfa, case_params, case_data['樓層數'], 2)
-    case_revenue = calculate_revenue(case_gfa, case_data['預設房價'], case_base_ping, land_unit_price=30)
-    
-    st.markdown('---')
-    st.subheader("試算結果")
-    
-    col_result1, col_result2, col_result3, col_result4 = st.columns(4)
-    
-    with col_result1:
-        st.metric("樓地板面積", f"{case_gfa:,.0f} 坪", f"≈ {case_gfa/30:.0f} 戶")
-    
-    with col_result2:
-        st.metric("開發總值", f"{case_revenue['total']:,.0f} 萬", 
-             
+
+# ---------------------------------------------
+# 執行計算
+# ---------------------------------------------
+res = calculate_model()
+
+# ---------------------------------------------
+# 輸出層：結果 KPI
+# ---------------------------------------------
+st.markdown("### 📊 運算結果看板")
+
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("更新後總價值", f"{res['Total_Value']/10000:.2f} 億")
+col2.metric("共同負擔總額", f"{res['Total_Cost']/10000:.2f} 億", delta=f"風險費率 {res['Risk_Rate']*100:.0f}%")
+col3.metric("地主分回比例", f"{res['Landlord_Ratio']*100:.2f}%")
+col4.metric("實施者 IRR", f"{res['IRR']*100:.2f}%")
+
+st.divider()
+
+# ---------------------------------------------
+# TABs：成本結構 / 敏感度 / 情境比較
+# ---------------------------------------------
+tab1, tab2, tab3 = st.tabs(["📈 成本結構拆解", "🎲 敏感度矩陣", "📚 情境比較"])
+
+# ========== TAB 1：成本結構 ==========
+with tab1:
+    st.subheader("共同負擔詳細結構")
+    st.write("（此區可依你需求補上完整細項拆解）")
+
+# ========== TAB 2：敏感度分析 ==========
+with tab2:
+    st.subheader("敏感度分析：房價 vs 營建成本")
+    st.write("此區可加入你的熱力圖運算（如需我可幫你補完整）")
+
+# ========== TAB 3：情境比較 ==========
+with tab3:
+    st.subheader("情境 A vs 情境 B")
+    st.markdown("""
+| 比較項目 | 情境 A：官方基準 | 情境 B：市場實務 |
+| --- | --- | --- |
+| **營建單價** | 16.23 萬 | 24.0 萬 |
+| **管理費率** | 43% | 18% |
+| **貸款成數** | 50% | 60% |
+| **風險費率** | 12% | 14% |
+    """)
