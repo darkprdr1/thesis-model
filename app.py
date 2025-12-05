@@ -5,6 +5,12 @@ import numpy_financial as npf
 import plotly.express as px
 import plotly.graph_objects as go
 import datetime
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import cm
+from reportlab.lib.utils import ImageReader
+import io
+
 
 # ---------------------------------------------
 # 頁面設定
@@ -519,4 +525,5 @@ st.download_button(
     file_name="Cost_and_Cashflow.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+
 
