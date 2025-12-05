@@ -4,6 +4,7 @@ import numpy as np
 import numpy_financial as npf
 import plotly.express as px
 import plotly.graph_objects as go
+import datetime
 
 # ---------------------------------------------
 # 頁面設定
@@ -43,7 +44,7 @@ st.markdown("""
 # 標題區
 # ---------------------------------------------
 st.title("🏙️ 新北市防災都更權利變換試算模型")
-st.markdown("### 第三章：混合研究法與參數建構實證")
+st.markdown("### 混合研究法與參數建構實證")
 st.info("本模型已依據專家訪談與文獻回饋修正，包含建材係數、風險費率查表與管理費結構拆分。")
 
 # ---------------------------------------------
@@ -185,7 +186,86 @@ def calculate_model():
 # ---------------------------------------------
 # 執行模型
 # ---------------------------------------------
-res = calculate_model()
+def calculate_model():
+    area_far = base_area * far_base_exist * bonus_multiplier
+    area_total = area_far * coeff_gfa
+    area_sale = area_far * coeff_sale
+    num_parking = int(area_total / 35)
+
+    # 工程費
+    c_demo = base_area * 3 * 0.15
+    c_build = area_total * final_unit_cost
+    c_engineering = c_demo + c_build
+
+    # 進階費用
+    c_advanced = cost_bonus_app + cost_urban_plan + cost_transfer
+
+    # 設計/安置
+    c_design = c_build * 0.06
+    c_reloc = c_build * 0.05
+
+    # 管理費
+    rate_risk = get_risk_fee_rate(area_total, num_owners)
+    c_mgmt_risk = c_build * rate_risk
+    c_mgmt_personnel = c_build * rate_personnel
+    c_mgmt_sales = (area_sale * price_unit_sale) * 0.05
+    c_mgmt_total = c_mgmt_risk + c_mgmt_personnel + c_mgmt_sales
+
+    # 利息
+    fund_demand = c_engineering + c_advanced + c_design + c_reloc
+    c_interest = fund_demand * loan_ratio * loan_rate * (dev_months / 12) * 0.5
+
+    # 稅捐
+    c_tax = c_build * 0.03
+
+    # 總成本
+    c_total = (c_engineering + c_advanced + c_design + c_reloc +
+               c_mgmt_total + c_interest + c_tax)
+
+    # 價值
+    val_parking_total = num_parking * price_parking
+    val_new_total = (area_sale * price_unit_sale) + val_parking_total
+
+    ratio_burden = c_total / val_new_total if val_new_total > 0 else 0
+    ratio_landlord = 1 - ratio_burden
+
+    # IRR 現金流相關數值
+    equity_ratio = 1 - loan_ratio
+    initial_out = (c_advanced + c_design) + (c_engineering * equity_ratio * 0.1)
+    yearly_cost = (c_engineering * equity_ratio * 0.9) / 3
+    loan_repay = fund_demand * loan_ratio
+    final_in = val_new_total - loan_repay - c_tax - c_mgmt_total - c_interest
+
+    c_flow = [-initial_out, -yearly_cost, -yearly_cost, -yearly_cost, final_in]
+    try:
+        irr_val = npf.irr(c_flow)
+    except:
+        irr_val = 0
+
+    return {
+        "GFA": area_total,
+        "Total_Cost": c_total,
+        "Total_Value": val_new_total,
+        "Landlord_Ratio": ratio_landlord,
+        "IRR": irr_val,
+        "Risk_Rate": rate_risk,
+        "Details": {
+            "工程費(含拆除)": c_engineering,
+            "風險管理費": c_mgmt_risk,
+            "人事/銷售費": c_mgmt_personnel + c_mgmt_sales,
+            "貸款利息": c_interest,
+            "進階費用(獎勵/都計)": c_advanced,
+            "其他(稅/設計/安置)": c_tax + c_design + c_reloc
+        },
+        "Cashflow": {   # ➜ 新增：把現金流也一起丟出去
+            "T0": c_flow[0],
+            "T1": c_flow[1],
+            "T2": c_flow[2],
+            "T3": c_flow[3],
+            "T4": c_flow[4],
+        }
+    }
+
 
 # ---------------------------------------------
 # 結果看板
@@ -307,9 +387,9 @@ with tab3:
 # ⭐ 新增功能：自動產生 IRR 模型計算報告
 # ======================================================
 
-import datetime
-
 def generate_report(res):
+    cf = res["Cashflow"]  # 這裡拿到 T0~T4
+
     report_lines = []
 
     report_lines.append("【新北市防災都更財務模型｜IRR 計算報告】")
@@ -350,11 +430,11 @@ def generate_report(res):
 
     # 現金流
     report_lines.append("【六、IRR 計算使用之現金流（萬元）】")
-    report_lines.append("T0（前期支出） = {:.2f}".format(-initial_out))
-    report_lines.append("T1 = {:.2f}".format(-yearly_cost))
-    report_lines.append("T2 = {:.2f}".format(-yearly_cost))
-    report_lines.append("T3 = {:.2f}".format(-yearly_cost))
-    report_lines.append("T4（最終回收） = {:.2f}".format(final_in))
+    report_lines.append("T0（前期支出） = {:.2f}".format(cf["T0"]))
+    report_lines.append("T1 = {:.2f}".format(cf["T1"]))
+    report_lines.append("T2 = {:.2f}".format(cf["T2"]))
+    report_lines.append("T3 = {:.2f}".format(cf["T3"]))
+    report_lines.append("T4（最終回收） = {:.2f}".format(cf["T4"]))
     report_lines.append("\n")
 
     # IRR 評估
@@ -365,17 +445,3 @@ def generate_report(res):
         report_lines.append("✘ IRR < 12%，專案需調整參數方可達投資條件。")
 
     return "\n".join(report_lines)
-
-
-# ---- Streamlit 下載按鈕 ----
-
-if st.button("📄 下載 IRR 模型計算報告"):
-    report_text = generate_report(res)
-    st.download_button(
-        label="⬇ 下載報告（TXT）",
-        data=report_text,
-        file_name="IRR_report.txt",
-        mime="text/plain"
-    )
-    st.success("報告已成功產生！")
-
