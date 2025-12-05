@@ -171,16 +171,24 @@ def calculate_model():
         "Total_Value": val_new_total,
         "Landlord_Ratio": ratio_landlord,
         "IRR": irr_val,
-        "Risk_Rate": rate_risk
+        "Risk_Rate": rate_risk,
+        "Details": {
+            "工程費(含拆除)": c_engineering,
+            "風險管理費": c_mgmt_risk,
+            "人事/銷售費": c_mgmt_personnel + c_mgmt_sales,
+            "貸款利息": c_interest,
+            "進階費用(獎勵/都計)": c_advanced,
+            "其他(稅/設計/安置)": c_tax + c_design + c_reloc
+        }
     }
 
 # ---------------------------------------------
-# 執行計算
+# 執行模型
 # ---------------------------------------------
 res = calculate_model()
 
 # ---------------------------------------------
-# 輸出層：結果 KPI
+# 結果看板
 # ---------------------------------------------
 st.markdown("### 📊 運算結果看板")
 
@@ -193,23 +201,99 @@ col4.metric("實施者 IRR", f"{res['IRR']*100:.2f}%")
 st.divider()
 
 # ---------------------------------------------
-# TABs：成本結構 / 敏感度 / 情境比較
+# Tabs：成本結構 / 敏感度熱力圖 / 情境比較
 # ---------------------------------------------
 tab1, tab2, tab3 = st.tabs(["📈 成本結構拆解", "🎲 敏感度矩陣", "📚 情境比較"])
 
-# ========== TAB 1：成本結構 ==========
+# ======================================================
+# TAB1：成本結構圖（Pie Chart）
+# ======================================================
 with tab1:
-    st.subheader("共同負擔詳細結構")
-    st.write("（此區可依你需求補上完整細項拆解）")
+    st.subheader("共同負擔詳細結構 (符合表 3-1 分類)")
 
-# ========== TAB 2：敏感度分析 ==========
+    df_cost = pd.DataFrame({
+        "項目": [
+            "工程費(含拆除)",
+            "風險管理費",
+            "人事管理費 + 銷售管理費",
+            "貸款利息",
+            "進階費用(獎勵/都計)",
+            "其他(稅/設計/安置)"
+        ],
+        "金額(萬元)": [
+            res["Details"]["工程費(含拆除)"],
+            res["Details"]["風險管理費"],
+            res["Details"]["人事/銷售費"],
+            res["Details"]["貸款利息"],
+            res["Details"]["進階費用(獎勵/都計)"],
+            res["Details"]["其他(稅/設計/安置)"]
+        ]
+    })
+
+    fig_cost = px.pie(
+        df_cost,
+        values="金額(萬元)",
+        names="項目",
+        title="共同負擔成本結構",
+        hole=0.4,
+        color_discrete_sequence=px.colors.sequential.RdBu
+    )
+    st.plotly_chart(fig_cost, use_container_width=True)
+
+    st.dataframe(df_cost, use_container_width=True)
+
+# ======================================================
+# TAB2：敏感度熱力圖（Heatmap）
+# ======================================================
 with tab2:
-    st.subheader("敏感度分析：房價 vs 營建成本")
-    st.write("此區可加入你的熱力圖運算（如需我可幫你補完整）")
+    st.subheader("敏感度分析：房價 vs 營建成本（地主分回比例 %）")
 
-# ========== TAB 3：情境比較 ==========
+    prices = np.arange(price_unit_sale - 10, price_unit_sale + 15, 5)
+    costs = np.arange(final_unit_cost - 4, final_unit_cost + 6, 2)
+
+    z_matrix = []
+
+    for c in costs:
+        row = []
+        for p in prices:
+            area_far = base_area * far_base_exist * bonus_multiplier
+            area_total = area_far * coeff_gfa
+            area_sale = area_far * coeff_sale
+            num_parking = int(area_total / 35)
+
+            val_new = (area_sale * p) + (num_parking * price_parking)
+            cost_build = area_total * c
+            cost_total = cost_build * 1.55  # 簡化共同負擔
+
+            ratio = (1 - cost_total / val_new) * 100
+            row.append(ratio)
+
+        z_matrix.append(row)
+
+    fig_heat = go.Figure(
+        data=go.Heatmap(
+            z=z_matrix,
+            x=prices,
+            y=costs,
+            colorscale="Viridis",
+            text=[[f"{v:.1f}%" for v in r] for r in z_matrix],
+            texttemplate="%{text}"
+        )
+    )
+
+    fig_heat.update_layout(
+        title="敏感度熱力圖（地主分回比例 %）",
+        xaxis_title="房價 (萬/坪)",
+        yaxis_title="營建單價 (萬/坪)"
+    )
+
+    st.plotly_chart(fig_heat, use_container_width=True)
+
+# ======================================================
+# TAB3：情境比較
+# ======================================================
 with tab3:
-    st.subheader("情境 A vs 情境 B")
+    st.subheader("情境 A (官方) vs 情境 B (市場)")
     st.markdown("""
 | 比較項目 | 情境 A：官方基準 | 情境 B：市場實務 |
 | --- | --- | --- |
@@ -218,3 +302,4 @@ with tab3:
 | **貸款成數** | 50% | 60% |
 | **風險費率** | 12% | 14% |
     """)
+    st.info("請使用左側調整參數模擬不同情境。")
