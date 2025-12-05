@@ -5,7 +5,6 @@ import numpy_financial as npf
 import plotly.express as px
 import plotly.graph_objects as go
 import datetime
-import base64
 import io
 
 # ---------------------------------------------
@@ -20,7 +19,8 @@ st.set_page_config(
 # ---------------------------------------------
 # CSS 優化
 # ---------------------------------------------
-st.markdown("""
+st.markdown(
+    """
 <style>
     .metric-card {
         background-color: #f0f2f6;
@@ -40,14 +40,19 @@ st.markdown("""
         color: white;
     }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # ---------------------------------------------
-# 標題
+# 標題與說明
 # ---------------------------------------------
 st.title("🏙️ 新北市防災都更權利變換試算模型")
 st.markdown("### 混合研究法與參數建構實證")
-st.info("本模型依據專家訪談與文獻回饋調整：建材係數、風險費率查表、管理費結構拆分與 IRR 現金流模型。")
+st.info(
+    "本模型依據專家訪談與文獻回饋調整：建材係數、風險費率查表、"
+    "管理費結構拆分與 IRR 現金流模型，可用於論文實證與方案比較。"
+)
 
 # ---------------------------------------------
 # 側邊欄：參數設定
@@ -55,19 +60,21 @@ st.info("本模型依據專家訪談與文獻回饋調整：建材係數、風�
 st.sidebar.header("⚙️ 參數設定面板")
 
 # ========== 1. 基地與容積 ==========
-with st.sidebar.expander("1. 基地與容積參數", expanded=True):
+with st.sidebar.expander("1️⃣ 基地與容積參數", expanded=True):
     base_area = st.number_input("基地面積 (坪)", value=300.0, step=10.0)
     far_legal = st.number_input("法定容積率 (%)", value=200.0, step=10.0) / 100
-    far_base_exist = st.number_input("原建築容積率 (%)", value=300.0, step=10.0) / 100
+    far_base_exist = (
+        st.number_input("原建築容積率 (%)", value=300.0, step=10.0) / 100
+    )
     bonus_multiplier = st.number_input("防災獎勵倍數", value=1.5, step=0.1)
     coeff_gfa = st.number_input("總樓地板係數 K_GFA", value=1.8, step=0.1)
     coeff_sale = st.number_input("銷售面積係數 K_Sale", value=1.6, step=0.1)
 
 # ========== 2. 營建與建材 ==========
-with st.sidebar.expander("2. 營建與建材設定", expanded=True):
+with st.sidebar.expander("2️⃣ 營建與建材設定", expanded=True):
     const_type = st.selectbox(
         "建材結構等級",
-        ["RC 一般標準 (S0)", "RC 高階 (+0.11)", "SRC/SC (+0.30)"]
+        ["RC 一般標準 (S0)", "RC 高階 (+0.11)", "SRC/SC (+0.30)"],
     )
 
     if "高階" in const_type:
@@ -80,39 +87,57 @@ with st.sidebar.expander("2. 營建與建材設定", expanded=True):
     base_unit_cost = st.number_input("營建基準單價 (萬/坪)", value=16.23, step=0.5)
     final_unit_cost = base_unit_cost * (1 + mat_coeff)
 
-    st.caption(f"💡 修正後營建單價：{final_unit_cost:.2f} 萬/坪 (建材係數 +{mat_coeff})")
+    st.caption(
+        f"💡 修正後營建單價：{final_unit_cost:.2f} 萬/坪 "
+        f"(建材係數 +{mat_coeff})"
+    )
 
 # ========== 3. 財務與風險 ==========
-with st.sidebar.expander("3. 財務與風險參數", expanded=True):
+with st.sidebar.expander("3️⃣ 財務與風險參數", expanded=True):
     num_owners = st.number_input("產權人數 (人)", value=20, step=5)
-    rate_personnel = st.number_input("人事行政管理費率 (%)", value=3.0, step=0.5) / 100
-    rate_sales = st.number_input("銷售管理費率 (%)", value=6.0, step=0.5) / 100
+    rate_personnel = (
+        st.number_input("人事行政管理費率 (%)", value=3.0, step=0.5) / 100
+    )
+    rate_sales = (
+        st.number_input("銷售管理費率 (%)", value=6.0, step=0.5) / 100
+    )
     loan_ratio = st.slider("貸款成數 (%)", 40, 80, 60) / 100
     loan_rate = st.number_input("貸款年利率 (%)", value=3.0, step=0.1) / 100
     dev_months = st.number_input("開發期程 (月)", value=48, step=6)
 
-# ========== 4. 費用 ==========
-with st.sidebar.expander("4. 進階費用設定 (B/G/H類)", expanded=False):
+# ========== 4. 進階費用 ==========
+with st.sidebar.expander("4️⃣ 進階費用設定 (B/G/H 類)", expanded=False):
     cost_bonus_app = st.number_input("容積獎勵申請費 (萬)", value=500, step=50)
-    cost_urban_plan = st.number_input("都計變更/審議費 (萬)", value=300, step=50)
-    cost_transfer = st.number_input("容積移轉/折繳代金 (萬)", value=0, step=100)
+    cost_urban_plan = st.number_input("都計變更 / 審議費 (萬)", value=300, step=50)
+    cost_transfer = st.number_input("容積移轉 / 折繳代金 (萬)", value=0, step=100)
 
-# ========== 5. 銷售 ==========
-with st.sidebar.expander("5. 估價與銷售", expanded=False):
-    val_old_total = st.number_input("更新前現況總值 (億元)", value=5.4, step=0.1) * 10000
-    price_unit_sale = st.number_input("更新後預售單價 (萬/坪)", value=60.0, step=2.0)
-    price_parking = st.number_input("車位單價 (萬/個)", value=220, step=10)
+# ========== 5. 銷售與估價 ==========
+with st.sidebar.expander("5️⃣ 估價與銷售參數", expanded=False):
+    val_old_total = (
+        st.number_input("更新前現況總值 (億元)", value=5.4, step=0.1) * 10000
+    )
+    price_unit_sale = st.number_input(
+        "更新後預售單價 (萬/坪)", value=60.0, step=2.0
+    )
+    price_parking = st.number_input(
+        "車位單價 (萬/個)", value=220, step=10
+    )
 
 # ---------------------------------------------
-# 風險費率查表
+# 風險費率查表函式
 # ---------------------------------------------
-def get_risk_fee_rate(gfa_ping, owners):
+def get_risk_fee_rate(gfa_ping: float, owners: int) -> float:
+    """
+    風險管理費率查表（簡化版）：
+    - 面積較小或產權人數過多 → 風險較高
+    """
     if gfa_ping < 3000 or owners > 50:
         return 0.14
     elif gfa_ping < 5000:
         return 0.13
     else:
         return 0.12
+
 
 # ---------------------------------------------
 # 核心計算模型
@@ -122,38 +147,49 @@ def calculate_model():
     area_far = base_area * far_base_exist * bonus_multiplier
     area_total = area_far * coeff_gfa
     area_sale = area_far * coeff_sale
-    num_parking = int(area_total / 35)
+    num_parking = int(area_total / 35)  # 粗估車位數
 
     # 2. 工程費
-    c_demo = base_area * 3 * 0.15
+    c_demo = base_area * 3 * 0.15  # 拆除費（簡化）
     c_build = area_total * final_unit_cost
     c_engineering = c_demo + c_build
 
     # 3. 進階費用
     c_advanced = cost_bonus_app + cost_urban_plan + cost_transfer
 
-    # 4. 設計 / 安置
+    # 4. 設計 / 安置費
     c_design = c_build * 0.06
     c_reloc = c_build * 0.05
 
-    # 5. 管理費
+    # 5. 管理費（含查表風險費）
     rate_risk = get_risk_fee_rate(area_total, num_owners)
     c_mgmt_risk = c_build * rate_risk
     c_mgmt_personnel = c_build * rate_personnel
     c_mgmt_sales = (area_sale * price_unit_sale) * 0.05
     c_mgmt_total = c_mgmt_risk + c_mgmt_personnel + c_mgmt_sales
 
-    # 6. 利息
+    # 6. 利息（以平均動用期間 1/2 計）
     fund_demand = c_engineering + c_advanced + c_design + c_reloc
-    c_interest = fund_demand * loan_ratio * loan_rate * (dev_months / 12) * 0.5
+    c_interest = (
+        fund_demand
+        * loan_ratio
+        * loan_rate
+        * (dev_months / 12)
+        * 0.5
+    )
 
-    # 7. 稅
+    # 7. 稅捐
     c_tax = c_build * 0.03
 
-    # 8. 總成本
+    # 8. 總成本（共同負擔）
     c_total = (
-        c_engineering + c_advanced + c_design + c_reloc +
-        c_mgmt_total + c_interest + c_tax
+        c_engineering
+        + c_advanced
+        + c_design
+        + c_reloc
+        + c_mgmt_total
+        + c_interest
+        + c_tax
     )
 
     # 9. 總銷價值
@@ -163,8 +199,9 @@ def calculate_model():
     ratio_burden = c_total / val_new_total if val_new_total > 0 else 0
     ratio_landlord = 1 - ratio_burden
 
-    # 10. IRR 現金流
+    # 10. IRR 現金流（假設 4 年期）
     equity_ratio = 1 - loan_ratio
+
     initial_out = (c_advanced + c_design) + (c_engineering * equity_ratio * 0.1)
     yearly_cost = (c_engineering * equity_ratio * 0.9) / 3
     loan_repay = fund_demand * loan_ratio
@@ -176,12 +213,12 @@ def calculate_model():
         -yearly_cost,
         -yearly_cost,
         -yearly_cost,
-        final_in
+        final_in,
     ]
 
     try:
         irr_val = npf.irr(cashflow)
-    except:
+    except Exception:
         irr_val = 0
 
     return {
@@ -197,16 +234,17 @@ def calculate_model():
             "人事/銷售費": c_mgmt_personnel + c_mgmt_sales,
             "貸款利息": c_interest,
             "進階費用(獎勵/都計)": c_advanced,
-            "其他(稅/設計/安置)": c_tax + c_design + c_reloc
+            "其他(稅/設計/安置)": c_tax + c_design + c_reloc,
         },
         "Cashflow": {
             "T0": cashflow[0],
             "T1": cashflow[1],
             "T2": cashflow[2],
             "T3": cashflow[3],
-            "T4": cashflow[4]
-        }
+            "T4": cashflow[4],
+        },
     }
+
 
 # -----------------------------------------------------
 # 執行模型
@@ -214,22 +252,35 @@ def calculate_model():
 res = calculate_model()
 
 # ---------------------------------------------
-# 結果看板
+# 結果看板（指標區）
 # ---------------------------------------------
 st.markdown("### 📊 運算結果看板")
 
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("更新後總價值", f"{res['Total_Value']/10000:.2f} 億")
-col2.metric("共同負擔總額", f"{res['Total_Cost']/10000:.2f} 億", delta=f"風險費率 {res['Risk_Rate']*100:.0f}%")
-col3.metric("地主分回比例", f"{res['Landlord_Ratio']*100:.2f}%")
-col4.metric("實施者 IRR", f"{res['IRR']*100:.2f}%")
+
+col1.metric("更新後總價值", f"{res['Total_Value'] / 10000:.2f} 億")
+col2.metric(
+    "共同負擔總額",
+    f"{res['Total_Cost'] / 10000:.2f} 億",
+    delta=f"風險費率 {res['Risk_Rate'] * 100:.0f}%",
+)
+col3.metric(
+    "地主分回比例",
+    f"{res['Landlord_Ratio'] * 100:.2f}%"
+)
+col4.metric(
+    "實施者 IRR",
+    f"{res['IRR'] * 100:.2f}%"
+)
 
 st.divider()
 
 # -----------------------------------------------------
 # Tabs：成本結構、敏感度、情境比較
 # -----------------------------------------------------
-tab1, tab2, tab3 = st.tabs(["📈 成本結構拆解", "🎲 敏感度矩陣", "📚 情境比較"])
+tab1, tab2, tab3 = st.tabs(
+    ["📈 成本結構拆解", "🎲 敏感度矩陣", "📚 情境比較"]
+)
 
 # =====================================================
 # TAB1：成本圓餅圖
@@ -237,32 +288,35 @@ tab1, tab2, tab3 = st.tabs(["📈 成本結構拆解", "🎲 敏感度矩陣", "
 with tab1:
     st.subheader("共同負擔成本結構")
 
-    df_cost = pd.DataFrame({
-        "項目": [
-            "工程費(含拆除)",
-            "風險管理費",
-            "人事/銷售管理費",
-            "貸款利息",
-            "進階費用",
-            "其他(稅/設計/安置)"
-        ],
-        "金額": [
-            res["Details"]["工程費(含拆除)"],
-            res["Details"]["風險管理費"],
-            res["Details"]["人事/銷售費"],
-            res["Details"]["貸款利息"],
-            res["Details"]["進階費用(獎勵/都計)"],
-            res["Details"]["其他(稅/設計/安置)"]
-        ]
-    })
+    df_cost = pd.DataFrame(
+        {
+            "項目": [
+                "工程費(含拆除)",
+                "風險管理費",
+                "人事/銷售管理費",
+                "貸款利息",
+                "進階費用",
+                "其他(稅/設計/安置)",
+            ],
+            "金額": [
+                res["Details"]["工程費(含拆除)"],
+                res["Details"]["風險管理費"],
+                res["Details"]["人事/銷售費"],
+                res["Details"]["貸款利息"],
+                res["Details"]["進階費用(獎勵/都計)"],
+                res["Details"]["其他(稅/設計/安置)"],
+            ],
+        }
+    )
 
     fig_cost = px.pie(
         df_cost,
         values="金額",
         names="項目",
         hole=0.4,
-        title="共同負擔成本比例"
+        title="共同負擔成本比例",
     )
+
     st.plotly_chart(fig_cost, use_container_width=True)
     st.dataframe(df_cost, use_container_width=True)
 
@@ -301,14 +355,14 @@ with tab2:
             y=costs,
             colorscale="Viridis",
             text=[[f"{v:.1f}%" for v in r] for r in z_matrix],
-            texttemplate="%{text}"
+            texttemplate="%{text}",
         )
     )
 
     fig_heat.update_layout(
         title="敏感度熱力圖（地主分回比例 %）",
         xaxis_title="房價 (萬/坪)",
-        yaxis_title="營建單價 (萬/坪)"
+        yaxis_title="營建單價 (萬/坪)",
     )
 
     st.plotly_chart(fig_heat, use_container_width=True)
@@ -317,115 +371,139 @@ with tab2:
 # TAB3：情境比較
 # =====================================================
 with tab3:
-    st.subheader("情境比較表")
+    st.subheader("情境比較表（示意）")
 
-    st.markdown("""
-| 比較項目 | 情境 A（官方） | 情境 B（市場） |
+    st.markdown(
+        """
+| 比較項目 | 情境 A（官方基準） | 情境 B（市場實務） |
 | --- | --- | --- |
 | 營建單價 | 16.23 萬 | 24.0 萬 |
 | 管理費率 | 43% | 18% |
 | 貸款成數 | 50% | 60% |
 | 風險費率 | 12% | 14% |
-""")
+"""
+    )
 
 # =====================================================
 # 報告產生器（TXT）
 # =====================================================
-def generate_report(res):
-    cf = res["Cashflow"]
+def generate_report(res_dict: dict) -> str:
+    cf = res_dict["Cashflow"]
 
-    lines = []
+    lines: list[str] = []
     lines.append("【新北市防災都更財務模型｜IRR 計算報告】")
-    lines.append(f"產生時間：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    lines.append(
+        f"產生時間：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    )
     lines.append("------------------------------------------------------------\n")
 
     lines.append("【一、基地與容積參數】")
-    lines.append(f"基地面積：{base_area} 坪")
-    lines.append(f"原建築容積率：{far_base_exist*100:.1f}%")
-    lines.append(f"防災獎勵倍數：{bonus_multiplier}")
-    lines.append(f"總樓地板係數：{coeff_gfa}")
-    lines.append(f"銷售面積係數：{coeff_sale}\n")
+    lines.append(f"基地面積：{base_area:.2f} 坪")
+    lines.append(f"原建築容積率：{far_base_exist * 100:.1f}%")
+    lines.append(f"防災獎勵倍數：{bonus_multiplier:.2f}")
+    lines.append(f"總樓地板係數 K_GFA：{coeff_gfa:.2f}")
+    lines.append(f"銷售面積係數 K_Sale：{coeff_sale:.2f}\n")
 
     lines.append("【二、營建與建材參數】")
-    lines.append(f"基準單價：{base_unit_cost} 萬/坪")
-    lines.append(f"修正後單價：{final_unit_cost:.2f} 萬/坪\n")
+    lines.append(f"基準營建單價：{base_unit_cost:.2f} 萬/坪")
+    lines.append(f"修正後營建單價：{final_unit_cost:.2f} 萬/坪\n")
 
     lines.append("【三、財務與風險參數】")
-    lines.append(f"貸款成數：{loan_ratio*100:.0f}%")
-    lines.append(f"貸款利率：{loan_rate*100:.2f}%")
-    lines.append(f"工期（月）：{dev_months}")
-    lines.append(f"風險管理費率（查表）：{res['Risk_Rate']*100:.1f}%\n")
+    lines.append(f"產權人數：{num_owners:.0f} 人")
+    lines.append(f"貸款成數：{loan_ratio * 100:.0f}%")
+    lines.append(f"貸款利率：{loan_rate * 100:.2f}%")
+    lines.append(f"工期（月）：{dev_months:.0f}")
+    lines.append(
+        f"風險管理費率（查表）：{res_dict['Risk_Rate'] * 100:.1f}%\n"
+    )
 
     lines.append("【四、共同負擔成本明細（萬元）】")
-    for k, v in res["Details"].items():
+    for k, v in res_dict["Details"].items():
         lines.append(f"{k}：{v:,.2f}")
-    lines.append(f"\n總共同負擔：{res['Total_Cost']:,.2f} 萬元\n")
+    lines.append(
+        f"\n總共同負擔：{res_dict['Total_Cost']:,.2f} 萬元\n"
+    )
 
     lines.append("【五、總銷價值與分回】")
-    lines.append(f"總銷金額：{res['Total_Value']/10000:.2f} 億元")
-    lines.append(f"地主分回比例：{res['Landlord_Ratio']*100:.2f}%")
-    lines.append(f"實施者 IRR：{res['IRR']*100:.2f}%\n")
+    lines.append(
+        f"總銷金額：{res_dict['Total_Value'] / 10000:.2f} 億元"
+    )
+    lines.append(
+        f"地主分回比例：{res_dict['Landlord_Ratio'] * 100:.2f}%"
+    )
+    lines.append(
+        f"實施者 IRR：{res_dict['IRR'] * 100:.2f}%\n"
+    )
 
-    lines.append("【六、現金流（IRR 計算基礎）】")
+    lines.append("【六、現金流（IRR 計算基礎，單位：萬元）】")
     lines.append(f"T0：{cf['T0']:.2f}")
     lines.append(f"T1：{cf['T1']:.2f}")
     lines.append(f"T2：{cf['T2']:.2f}")
     lines.append(f"T3：{cf['T3']:.2f}")
     lines.append(f"T4（最終回收）：{cf['T4']:.2f}\n")
 
-    lines.append("【七、可行性判斷】")
-    if res["IRR"] >= 0.12:
+    lines.append("【七、投資可行性判斷】")
+    if res_dict["IRR"] >= 0.12:
         lines.append("✔ IRR ≥ 12%，專案具投資可行性。")
     else:
-        lines.append("✘ IRR < 12%，需調整參數以提升可行性。")
+        lines.append("✘ IRR < 12%，專案需調整參數以達到投資門檻。")
 
     return "\n".join(lines)
+
 
 # =====================================================
 # Excel 成本＋現金流
 # =====================================================
-def generate_excel(res):
+def generate_excel(res_dict: dict) -> io.BytesIO:
     output = io.BytesIO()
 
-    df_cost = pd.DataFrame(res["Details"].items(), columns=["項目", "金額(萬元)"])
-    cf = res["Cashflow"]
-    df_cf = pd.DataFrame({
-        "期別": ["T0", "T1", "T2", "T3", "T4"],
-        "金額(萬元)": [cf["T0"], cf["T1"], cf["T2"], cf["T3"], cf["T4"]]
-    })
+    df_cost = pd.DataFrame(
+        res_dict["Details"].items(), columns=["項目", "金額(萬元)"]
+    )
+    cf = res_dict["Cashflow"]
+    df_cf = pd.DataFrame(
+        {
+            "期別": ["T0", "T1", "T2", "T3", "T4"],
+            "金額(萬元)": [
+                cf["T0"],
+                cf["T1"],
+                cf["T2"],
+                cf["T3"],
+                cf["T4"],
+            ],
+        }
+    )
 
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+    with pd.ExcelWriter(output) as writer:
         df_cost.to_excel(writer, sheet_name="成本拆解", index=False)
         df_cf.to_excel(writer, sheet_name="現金流量表", index=False)
 
     output.seek(0)
     return output
 
-# -----------------------------------------------------
-# 下載按鈕區
-# -----------------------------------------------------
-report_text = generate_report(res)
-st.download_button(
-    label="📄 下載 IRR 計算報告（TXT）",
-    data=report_text,
-    file_name="IRR_Report.txt",
-    mime="text/plain"
-)
 
-def generate_html_report(res, fig_cost, fig_heat):
-    cf = res["Cashflow"]
+# =====================================================
+# HTML 報告（可列印成 PDF）
+# =====================================================
+def generate_html_report(res_dict: dict, fig_cost_obj, fig_heat_obj) -> str:
+    cf = res_dict["Cashflow"]
 
-    # 轉換圖為 HTML（不使用 PNG）
-    fig_cost_html = fig_cost.to_html(include_plotlyjs='cdn')
-    fig_heat_html = fig_heat.to_html(include_plotlyjs='cdn')
+    # 轉換圖為可嵌入 HTML 的 div（不使用 PNG、不需要 kaleido）
+    fig_cost_html = fig_cost_obj.to_html(
+        include_plotlyjs="cdn", full_html=False
+    )
+    fig_heat_html = fig_heat_obj.to_html(
+        include_plotlyjs=False, full_html=False
+    )
 
     html = f"""
     <html>
     <head>
         <meta charset="utf-8">
+        <title>新北市防災都更財務模型｜IRR 計算報告</title>
         <style>
             body {{
-                font-family: Arial, sans-serif;
+                font-family: Arial, "Microsoft JhengHei", sans-serif;
                 margin: 40px;
                 line-height: 1.6;
             }}
@@ -434,11 +512,14 @@ def generate_html_report(res, fig_cost, fig_heat):
             }}
             h2 {{
                 margin-top: 30px;
+                border-left: 4px solid #4e73df;
+                padding-left: 8px;
             }}
             .section {{
                 margin-bottom: 30px;
             }}
         </style>
+        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     </head>
 
     <body>
@@ -447,50 +528,74 @@ def generate_html_report(res, fig_cost, fig_heat):
 
         <div class="section">
             <h2>一、專案基本參數</h2>
-            <p>基地面積：{base_area} 坪</p>
-            <p>防災獎勵倍數：{bonus_multiplier}</p>
-            <p>總樓地板係數：{coeff_gfa}</p>
-            <p>銷售係數：{coeff_sale}</p>
-            <p>建材修正後成本：{final_unit_cost:.2f} 萬/坪</p>
-            <p>貸款成數：{loan_ratio*100:.0f}%</p>
-            <p>工期：{dev_months} 個月</p>
+            <p>基地面積：{base_area:.2f} 坪</p>
+            <p>防災獎勵倍數：{bonus_multiplier:.2f}</p>
+            <p>總樓地板係數 K_GFA：{coeff_gfa:.2f}</p>
+            <p>銷售面積係數 K_Sale：{coeff_sale:.2f}</p>
+            <p>營建單價（修正後）：{final_unit_cost:.2f} 萬 / 坪</p>
+            <p>貸款成數：{loan_ratio * 100:.0f}%</p>
+            <p>開發期程：約 {dev_months:.0f} 個月</p>
         </div>
 
         <div class="section">
-            <h2>二、共同負擔成本結構（互動式）</h2>
+            <h2>二、共同負擔成本結構（互動圖）</h2>
             {fig_cost_html}
         </div>
 
         <div class="section">
-            <h2>三、敏感度分析（互動式熱力圖）</h2>
+            <h2>三、敏感度分析（房價 × 營建成本）</h2>
             {fig_heat_html}
         </div>
 
         <div class="section">
-            <h2>四、IRR 與現金流</h2>
-            <p>IRR：{res['IRR']*100:.2f}%</p>
-            <p>T0：{cf['T0']:.2f} 萬</p>
-            <p>T1：{cf['T1']:.2f} 萬</p>
-            <p>T2：{cf['T2']:.2f} 萬</p>
-            <p>T3：{cf['T3']:.2f} 萬</p>
-            <p>T4（最終回收）：{cf['T4']:.2f} 萬</p>
+            <h2>四、IRR 與現金流（單位：萬元）</h2>
+            <p>IRR：{res_dict['IRR'] * 100:.2f}%</p>
+            <p>T0：{cf['T0']:.2f}</p>
+            <p>T1：{cf['T1']:.2f}</p>
+            <p>T2：{cf['T2']:.2f}</p>
+            <p>T3：{cf['T3']:.2f}</p>
+            <p>T4（最終回收）：{cf['T4']:.2f}</p>
         </div>
 
     </body>
     </html>
     """
     return html
-    
+
+
+# -----------------------------------------------------
+# 下載按鈕區
+# -----------------------------------------------------
+st.markdown("### 📥 報告與試算結果下載")
+
+col_a, col_b, col_c = st.columns(3)
+
+with col_a:
+    report_text = generate_report(res)
+    st.download_button(
+        label="📝 下載 IRR 計算報告（TXT）",
+        data=report_text,
+        file_name="IRR_Report.txt",
+        mime="text/plain",
+    )
+
+with col_b:
+    excel_file = generate_excel(res)
+    st.download_button(
+        label="📊 下載成本與現金流（Excel）",
+        data=excel_file,
+        file_name="Urban_Redevelopment_Cost_Cashflow.xlsx",
+        mime=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        ),
+    )
+
+with col_c:
     html_report = generate_html_report(res, fig_cost, fig_heat)
-
-st.download_button(
-    label="📄 下載完整 PDF 報告（HTML，可自行列印成 PDF）",
-    data=html_report,
-    file_name="IRR_Report.html",
-    mime="text/html"
-)
-
-
-
-
-
+    st.download_button(
+        label="📄 下載完整報告（HTML，可另存 PDF）",
+        data=html_report,
+        file_name="IRR_Report.html",
+        mime="text/html",
+    )
