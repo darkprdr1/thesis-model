@@ -480,6 +480,7 @@ def generate_html_report(res, fig_cost, fig_heat):
     </html>
     """
     return html
+    
     html_report = generate_html_report(res, fig_cost, fig_heat)
 
 st.download_button(
@@ -488,6 +489,7 @@ st.download_button(
     file_name="IRR_Report.html",
     mime="text/html"
 )
+
 
 
 
