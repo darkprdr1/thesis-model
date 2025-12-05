@@ -187,61 +187,77 @@ def calculate_model():
 # 執行模型
 # ---------------------------------------------
 def calculate_model():
+
+    # 1️⃣ 面積計算
     area_far = base_area * far_base_exist * bonus_multiplier
     area_total = area_far * coeff_gfa
     area_sale = area_far * coeff_sale
     num_parking = int(area_total / 35)
 
-    # 工程費
+    # 2️⃣ 工程費
     c_demo = base_area * 3 * 0.15
     c_build = area_total * final_unit_cost
     c_engineering = c_demo + c_build
 
-    # 進階費用
+    # 3️⃣ 進階費用
     c_advanced = cost_bonus_app + cost_urban_plan + cost_transfer
 
-    # 設計/安置
+    # 4️⃣ 設計 / 安置
     c_design = c_build * 0.06
     c_reloc = c_build * 0.05
 
-    # 管理費
+    # 5️⃣ 管理費
     rate_risk = get_risk_fee_rate(area_total, num_owners)
     c_mgmt_risk = c_build * rate_risk
     c_mgmt_personnel = c_build * rate_personnel
     c_mgmt_sales = (area_sale * price_unit_sale) * 0.05
     c_mgmt_total = c_mgmt_risk + c_mgmt_personnel + c_mgmt_sales
 
-    # 利息
+    # 6️⃣ 利息
     fund_demand = c_engineering + c_advanced + c_design + c_reloc
     c_interest = fund_demand * loan_ratio * loan_rate * (dev_months / 12) * 0.5
 
-    # 稅捐
+    # 7️⃣ 稅捐
     c_tax = c_build * 0.03
 
-    # 總成本
-    c_total = (c_engineering + c_advanced + c_design + c_reloc +
-               c_mgmt_total + c_interest + c_tax)
+    # 8️⃣ 總成本
+    c_total = (
+        c_engineering + c_advanced + c_design + c_reloc +
+        c_mgmt_total + c_interest + c_tax
+    )
 
-    # 價值
+    # 9️⃣ 價值估算
     val_parking_total = num_parking * price_parking
     val_new_total = (area_sale * price_unit_sale) + val_parking_total
 
-    ratio_burden = c_total / val_new_total if val_new_total > 0 else 0
+    if val_new_total > 0:
+        ratio_burden = c_total / val_new_total
+    else:
+        ratio_burden = 0
+
     ratio_landlord = 1 - ratio_burden
 
-    # IRR 現金流相關數值
+    # 🔟 IRR 現金流
     equity_ratio = 1 - loan_ratio
     initial_out = (c_advanced + c_design) + (c_engineering * equity_ratio * 0.1)
     yearly_cost = (c_engineering * equity_ratio * 0.9) / 3
     loan_repay = fund_demand * loan_ratio
     final_in = val_new_total - loan_repay - c_tax - c_mgmt_total - c_interest
 
-    c_flow = [-initial_out, -yearly_cost, -yearly_cost, -yearly_cost, final_in]
+    c_flow = [
+        -initial_out,
+        -yearly_cost,
+        -yearly_cost,
+        -yearly_cost,
+        final_in
+    ]
+
     try:
         irr_val = npf.irr(c_flow)
     except:
         irr_val = 0
 
+    # ✔ 回傳所有結果（必要）
     return {
         "GFA": area_total,
         "Total_Cost": c_total,
@@ -257,7 +273,7 @@ def calculate_model():
             "進階費用(獎勵/都計)": c_advanced,
             "其他(稅/設計/安置)": c_tax + c_design + c_reloc
         },
-        "Cashflow": {   # ➜ 新增：把現金流也一起丟出去
+        "Cashflow": {
             "T0": c_flow[0],
             "T1": c_flow[1],
             "T2": c_flow[2],
@@ -267,6 +283,7 @@ def calculate_model():
     }
 
 
+res = calculate_model()
 # ---------------------------------------------
 # 結果看板
 # ---------------------------------------------
@@ -445,3 +462,4 @@ def generate_report(res):
         report_lines.append("✘ IRR < 12%，專案需調整參數方可達投資條件。")
 
     return "\n".join(report_lines)
+
